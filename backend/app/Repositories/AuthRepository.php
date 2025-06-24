@@ -16,4 +16,9 @@ class AuthRepository
     {
         return Hash::check($password, $user->password);
     }
+    public function updatePassword(User $user, string $hashedPassword): void
+    {
+        $user->password = $hashedPassword;
+        $user->save();
+    }
 }

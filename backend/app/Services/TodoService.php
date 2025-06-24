@@ -65,7 +65,7 @@ class TodoService
 
         // Durum ve Öncelik Kontrolü
         if (isset($data['status'])) {
-            $allowedStatus = ['bekliyor', 'yapiliyor', 'iptal edildi', 'tamamlandi'];
+            $allowedStatus = ['bekliyor', 'yapiliyor', 'iptal', 'tamamlandi'];
             if (in_array($data['status'], $allowedStatus)) {
                 $todoDTO->status = $data['status'];
             }

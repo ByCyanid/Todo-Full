@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { PlusCircle, Trash2, CheckCircle, XCircle, Clock, Moon, Sun, Flag, FolderPlus, Filter, X } from "lucide-react"
+import { PlusCircle, Trash2, CheckCircle, XCircle, Clock, Moon, Sun, Flag, FolderPlus, Filter, X, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
 import { toast, Toaster } from "sonner"
+import { useRouter } from "next/navigation"
 
 type TaskStatus = "bekliyor" | "yapiliyor" | "tamamlandi" | "iptal"
 type PriorityLevel = "yuksek" | "orta" | "dusuk"
@@ -58,7 +59,7 @@ export default function TodoApp() {
   }>({
     priorities: [],
   })
-  
+
   // Authentication state
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
@@ -69,11 +70,26 @@ export default function TodoApp() {
 
   // Dialog kontrolü için state
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false)
+  const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false)
+  const [profileStats, setProfileStats] = useState({
+    totalProjects: 0,
+    totalTodos: 0,
+    bekliyor: 0,
+    yapiliyor: 0,
+    tamamlandi: 0,
+    iptal: 0,
+  })
+  const [isStatsLoading, setIsStatsLoading] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmNewPassword, setConfirmNewPassword] = useState("")
 
   // Proje düzenleme state'i
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editProjectName, setEditProjectName] = useState("");
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+
+  const router = useRouter();
 
   // Initialize auth state from localStorage
   useEffect(() => {
@@ -84,7 +100,7 @@ export default function TodoApp() {
     }
     setIsLoading(false) // Token kontrolü tamamlandı, yükleme durumunu güncelle
   }, [])
-  
+
   // Initialize dark mode based on user preference
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -118,7 +134,7 @@ export default function TodoApp() {
   // Handle login
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     // Form validasyonu
     if (!email || !password) {
       toast.error("Giriş başarısız", {
@@ -128,7 +144,7 @@ export default function TodoApp() {
       })
       return
     }
-    
+
     try {
       // API'ye istek gönderme
       const response = await fetch('http://localhost:8000/api/login', {
@@ -141,21 +157,21 @@ export default function TodoApp() {
           password
         })
       })
-      
+
       if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.message || 'Giriş işlemi başarısız')
       }
-      
+
       const data = await response.json()
-      
+
       // Token'ı sakla
       setToken(data.token)
       setIsAuthenticated(true)
-      
+
       // Token'ı localStorage'a kaydet
       localStorage.setItem('token', data.token)
-      
+
       toast.success("Giriş başarılı", {
         description: "Todo uygulamasına hoş geldiniz!",
         duration: 3000,
@@ -170,7 +186,7 @@ export default function TodoApp() {
       })
     }
   }
-  
+
   // Handle logout
   const handleLogout = async () => {
     try {
@@ -182,16 +198,16 @@ export default function TodoApp() {
           'Content-Type': 'application/json'
         }
       })
-      
+
       // State'i temizle
       setIsAuthenticated(false)
       setEmail("")
       setPassword("")
       setToken(null)
-      
+
       // Token'ı localStorage'dan sil
       localStorage.removeItem('token')
-      
+
       toast.info("Çıkış yapıldı", {
         description: "Başarıyla çıkış yaptınız.",
         duration: 3000
@@ -205,15 +221,129 @@ export default function TodoApp() {
     }
   }
 
+  const generateProfileStats = async () => {
+    if (!token) return;
+    setIsStatsLoading(true);
+
+    try {
+      const fetchTasksForProject = async (projectId: string): Promise<Task[]> => {
+        try {
+          const response = await fetch(`http://localhost:8000/api/todos/${projectId}`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          if (!response.ok) {
+            console.error(`Error fetching tasks for project ${projectId}: ${response.statusText}`);
+            return [];
+          }
+          const responseText = await response.text();
+          if (!responseText) return [];
+          const data = JSON.parse(responseText);
+
+          return Array.isArray(data) ? data.map((todo: any) => ({
+            id: todo?.id?.toString() ?? '',
+            text: todo?.title ?? 'İsimsiz görev',
+            status: todo?.status as TaskStatus ?? 'bekliyor',
+            priority: todo?.priority as PriorityLevel ?? 'orta',
+            project: todo?.project_id?.toString() ?? projectId,
+          })) : [];
+        } catch (error) {
+          console.error(`Failed to fetch or parse tasks for project ${projectId}`, error);
+          return [];
+        }
+      };
+
+      const allTasksPromises = projects.map(p => fetchTasksForProject(p.id));
+      const allTasksArrays = await Promise.all(allTasksPromises);
+      const allTasks = allTasksArrays.flat();
+
+      const statusCounts = {
+        bekliyor: 0,
+        yapiliyor: 0,
+        tamamlandi: 0,
+        iptal: 0,
+      };
+
+      allTasks.forEach(task => {
+        if (task.status && statusCounts.hasOwnProperty(task.status)) {
+          statusCounts[task.status]++;
+        }
+      });
+
+      setProfileStats({
+        totalProjects: projects.length,
+        totalTodos: allTasks.length,
+        ...statusCounts,
+      });
+
+    } catch (error) {
+      console.error("Error generating profile stats:", error);
+      toast.error("İstatistikler yüklenirken bir hata oluştu.");
+    } finally {
+      setIsStatsLoading(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (newPassword !== confirmNewPassword) {
+      toast.error("Yeni şifreler uyuşmuyor.");
+      return;
+    }
+    if (!currentPassword || !newPassword) {
+      toast.error("Lütfen tüm alanları doldurun.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast.error("Yeni şifre en az 6 karakter olmalıdır.");
+      return;
+    }
+
+    try {
+      // NOT: Bu özelliğin çalışması için backend'de '/api/change-password' endpoint'inin olması gerekmektedir.
+      const response = await fetch('http://localhost:8000/api/change-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          current_password: currentPassword,
+          new_password: newPassword,
+          new_password_confirmation: confirmNewPassword
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Şifre değiştirilemedi.");
+      }
+
+      toast.success("Şifre başarıyla değiştirildi.");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+      setIsProfileDialogOpen(false);
+    } catch (error) {
+      console.error('Password change error:', error);
+      toast.error("Şifre değiştirme başarısız", {
+        description: error instanceof Error ? error.message : "Bir hata oluştu.",
+      });
+    }
+  };
+
   // Projeye göre todoları çekme fonksiyonu
   const fetchTodosByProject = async (projectId: string) => {
     if (!token) {
       console.error("Token yok, todo listesi çekilemiyor");
       return;
     }
-    
+
     console.log(`Projeden todoları çekiyor: ID ${projectId}`);
-    
+
     try {
       const response = await fetch(`http://localhost:8000/api/todos/${projectId}`, {
         method: 'GET',
@@ -222,17 +352,17 @@ export default function TodoApp() {
           'Content-Type': 'application/json'
         }
       });
-      
+
       console.log("Todo listeleme yanıt durumu:", response.status, response.statusText);
-      
+
       // Başarısız yanıt durumunda
       if (!response.ok) {
         let errorMessage = `Görevler yüklenirken bir hata oluştu (${response.status})`;
-        
+
         try {
           const responseText = await response.text();
           console.error('Todo listeleme hata yanıtı:', responseText);
-          
+
           try {
             const errorData = JSON.parse(responseText);
             errorMessage = errorData.message || errorMessage;
@@ -242,16 +372,16 @@ export default function TodoApp() {
         } catch (e) {
           console.error("Yanıt metni okunamadı", e);
         }
-        
+
         toast.error("Görevler yüklenemedi", {
           description: errorMessage,
           duration: 3000,
           style: { backgroundColor: '#FEE2E2', color: '#991B1B', border: '1px solid #F87171' }
         });
-        
+
         return;
       }
-      
+
       // Başarılı yanıt işleme
       let responseText;
       try {
@@ -260,15 +390,15 @@ export default function TodoApp() {
         console.error("Yanıt metni okunamadı", e);
         return;
       }
-      
+
       if (!responseText) {
         console.log("Boş yanıt, todo listesi boş");
         setTasks([]);
         return;
       }
-      
+
       console.log('Todo listeleme başarılı ham yanıt:', responseText);
-      
+
       let todosData;
       try {
         todosData = JSON.parse(responseText);
@@ -280,9 +410,9 @@ export default function TodoApp() {
         });
         return;
       }
-      
+
       console.log("Parsed todosData:", todosData);
-      
+
       // API'den gelen görevleri state'e kaydet (null/undefined kontrolleriyle)
       const formattedTodos: Task[] = Array.isArray(todosData) ? todosData.map((todo: any) => {
         console.log("Processing todo item:", todo);
@@ -294,12 +424,12 @@ export default function TodoApp() {
           project: todo && todo.project_id ? todo.project_id.toString() : projectId
         };
       }) : [];
-      
+
       console.log("Formatted todos:", formattedTodos);
-      
+
       // State'i güncelle
       setTasks(formattedTodos);
-      
+
     } catch (error) {
       console.error('Görevleri çekme hatası:', error);
       toast.error("Görevler yüklenemedi", {
@@ -333,12 +463,12 @@ export default function TodoApp() {
           project_id: newTaskProject
         })
       });
-      
+
       if (!response.ok) {
         // Ham yanıt metnini al
         const responseText = await response.text();
         console.error('Todo ekleme hatası ham yanıt:', responseText);
-        
+
         // Yanıt metnini JSON olarak parse etmeyi dene
         let errorMessage = 'Görev eklenirken bir hata oluştu';
         try {
@@ -348,14 +478,14 @@ export default function TodoApp() {
           // JSON parse edilemezse ham yanıt metnini kullan
           errorMessage = responseText || errorMessage;
         }
-        
+
         throw new Error(errorMessage);
       }
-      
+
       // Başarılı yanıt için ham metni al
       const responseText = await response.text();
       let todoData = null;
-      
+
       if (responseText) {
         console.log('Todo ekleme başarılı ham yanıt:', responseText);
         try {
@@ -364,7 +494,7 @@ export default function TodoApp() {
           console.log('Başarılı yanıt JSON parse edilemedi, varsayılan değerler kullanılacak');
         }
       }
-      
+
       // Yeni görevi tasks state'ine ekle (null/undefined kontrolleriyle)
       const newTaskObj: Task = {
         id: todoData && todoData.id ? todoData.id.toString() : Date.now().toString(),
@@ -373,22 +503,22 @@ export default function TodoApp() {
         priority: (todoData && todoData.priority ? todoData.priority : newTaskPriority) as PriorityLevel,
         project: todoData && todoData.project_id ? todoData.project_id.toString() : newTaskProject
       };
-      
+
       setTasks([
         ...tasks,
         newTaskObj
       ]);
-      
+
       // Todo ekleme formunu temizle
       setNewTask("");
-      
+
       // Show green notification
       toast.success("Görev eklendi", {
         description: `"${newTaskObj.text}" görevi başarıyla eklendi.`,
         duration: 3000,
         style: { backgroundColor: '#D1FAE5', color: '#065F46', border: '1px solid #6EE7B7' }
       });
-      
+
       // Seçili projeye ait todoları yenile
       if (selectedProjects.length > 0) {
         fetchTodosByProject(selectedProjects[0]);
@@ -415,21 +545,21 @@ export default function TodoApp() {
           },
           body: JSON.stringify({ name: newProjectName })
         })
-        
+
         if (!response.ok) {
           const errorData = await response.json()
           throw new Error(errorData.message || 'Proje eklenirken bir hata oluştu')
         }
-        
+
         // API'den dönen proje verisini al
         const projectData = await response.json()
-        
+
         // API'den dönen id ve name değerlerini kullan
         const newProject: Project = {
           id: projectData.id || Date.now().toString(),
           name: projectData.name
         }
-        
+
         const updatedProjects = [...projects, newProject]
         setProjects(updatedProjects)
 
@@ -441,10 +571,10 @@ export default function TodoApp() {
         })
 
         setNewProjectName("")
-        
+
         // Dialog'u kapat
         setIsProjectDialogOpen(false)
-        
+
         // Projeleri yeniden çek
         fetchProjects();
       } catch (error) {
@@ -461,25 +591,25 @@ export default function TodoApp() {
   const deleteTask = async (id: string) => {
     // Get task info for the notification
     const task = tasks.find(t => t.id === id);
-    
+
     if (!task) {
       console.error("Silinecek task bulunamadı, ID:", id);
-      
+
       // Görev bulunamadıysa kırmızı hata yerine sarı uyarı göster
       toast.warning("Görev mevcut değil", {
         description: `ID: ${id}`,
         duration: 3000,
         style: { backgroundColor: '#FFF7CD', color: '#7A4F01', border: '1px solid #F0CF65' }
       });
-      
+
       return;
     }
-    
+
     console.log("Silme işlemi başladı, Task ID:", id, "Task:", task);
-    
+
     // Önce UI'dan kaldır (optimistik güncelleme)
     setTasks(prevTasks => prevTasks.filter(t => t.id !== id));
-    
+
     try {
       // API'ye silme isteği gönder
       const response = await fetch(`http://localhost:8000/api/todos/${id}`, {
@@ -489,10 +619,10 @@ export default function TodoApp() {
           'Content-Type': 'application/json'
         }
       });
-      
+
       // Yanıt durumunu logla
       console.log("Silme API yanıt durumu:", response.status, response.statusText);
-      
+
       // API yanıtını oku (boş olabilir)
       let responseText = "";
       try {
@@ -501,19 +631,19 @@ export default function TodoApp() {
       } catch (e) {
         console.log("Silme API yanıtı boş olabilir");
       }
-      
+
       // Başarısız yanıt durumunda
       if (!response.ok) {
         console.error(`Silme başarısız oldu: ${response.status} ${response.statusText}`);
-        
+
         // Silinen task'ı geri ekle
         setTasks(prevTasks => [...prevTasks, task]);
-        
+
         // Boş yanıt veya görev bulunamadı hataları için uyarı, diğer hatalar için kırmızı hata
-        if ((response.status === 404) || 
-            (responseText && responseText.includes("not found")) || 
-            (responseText && responseText.includes("bulunamadı"))) {
-          
+        if ((response.status === 404) ||
+          (responseText && responseText.includes("not found")) ||
+          (responseText && responseText.includes("bulunamadı"))) {
+
           // 404 veya "bulunamadı" hatası için sarı uyarı göster
           toast.warning("Görev mevcut değil", {
             description: `ID: ${id}`,
@@ -528,19 +658,19 @@ export default function TodoApp() {
             style: { backgroundColor: '#FEE2E2', color: '#991B1B', border: '1px solid #F87171' }
           });
         }
-        
+
         return;
       }
-      
+
       // Başarılı silme bildirimi
       toast.success("Görev silindi", {
         description: `"${task.text}" (ID: ${task.id}) görevi başarıyla silindi.`,
         duration: 3000,
         style: { backgroundColor: '#D1FAE5', color: '#065F46', border: '1px solid #6EE7B7' }
       });
-      
+
       console.log(`Task silindi, ID: ${id}`);
-      
+
       // Görevleri API'den yeniden yükle - API'den görevleri yeniden yüklemek yerine
       // Zaten UI'dan sildiğimiz görevi koruyoruz, fetchTodosByProject fonksiyonu sorunluysa
       // bu daha güvenli olacaktır
@@ -549,13 +679,13 @@ export default function TodoApp() {
         // Tek bir proje seçiliyse, bu projeye ait görevleri yeniden getir
         await fetchTodosByProject(selectedProjects[0]);
       }
-      
+
     } catch (error) {
       console.error('Görev silme hatası:', error);
-      
+
       // Hata durumunda task'ı geri ekle
       setTasks(prevTasks => [...prevTasks, task]);
-      
+
       // Genel bir hata oluştuğunda kırmızı hata bildirimi göster
       toast.error("Görev silinemedi", {
         description: `ID: ${id}`,
@@ -568,9 +698,9 @@ export default function TodoApp() {
   const deleteProject = async (projectId: string) => {
     // Get project info for the notification
     const project = projects.find(p => p.id === projectId)
-    
+
     if (!project) return;
-    
+
     try {
       // API'ye silme isteği gönder
       const response = await fetch(`http://localhost:8000/api/projects/${projectId}`, {
@@ -580,12 +710,12 @@ export default function TodoApp() {
           'Content-Type': 'application/json'
         }
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Proje silinirken bir hata oluştu');
       }
-      
+
       // Frontend state'i güncelle
       // Remove tasks associated with this project
       setTasks(tasks.filter((task) => task.project !== projectId))
@@ -595,12 +725,12 @@ export default function TodoApp() {
 
       // Remove project
       setProjects(projects.filter((p) => p.id !== projectId))
-      
+
       // If current new task project is being deleted, reset it
       if (newTaskProject === projectId) {
         setNewTaskProject("")
       }
-      
+
       // Show notification
       toast.success("Proje silindi", {
         description: `"${project.name}" projesi başarıyla silindi.`,
@@ -697,7 +827,7 @@ export default function TodoApp() {
 
     // Status aynıysa işlem yapma
     if (task.status === newStatus) return;
-    
+
     try {
       // Yeni endpoint'i kullan - /todos/{id}/status
       const response = await fetch(`http://localhost:8000/api/todos/${taskId}/status`, {
@@ -710,14 +840,14 @@ export default function TodoApp() {
           status: newStatus
         })
       });
-      
+
       let successData;
-      
+
       if (!response.ok) {
         // Ham yanıt metnini al
         const responseText = await response.text();
         console.error('Taşıma hatası ham yanıt:', responseText);
-        
+
         // Yanıt metnini JSON olarak parse etmeyi dene
         let errorMessage = 'Görev durumu güncellenirken bir hata oluştu';
         try {
@@ -727,7 +857,7 @@ export default function TodoApp() {
           // JSON parse edilemezse ham yanıt metnini kullan
           errorMessage = responseText || errorMessage;
         }
-        
+
         throw new Error(errorMessage);
       } else {
         // Başarılı yanıt için de ham metni al
@@ -745,10 +875,10 @@ export default function TodoApp() {
           console.log('Yanıt metni alınamadı, bu normal olabilir');
         }
       }
-      
+
       // Frontend state'i güncelle
       setTasks(tasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)))
-      
+
       // Get status text for notification
       let statusText = ""
       switch (newStatus) {
@@ -765,24 +895,24 @@ export default function TodoApp() {
           statusText = "İptal Edildi"
           break
       }
-      
+
       // Show notification
       toast.success("Görev taşındı", {
         description: `"${task.text}" görevi "${statusText}" durumuna taşındı.`,
         duration: 3000,
         style: { backgroundColor: '#D1FAE5', color: '#065F46', border: '1px solid #6EE7B7' }
       })
-      
+
       // Opsiyonel: Durumu yeniden çek
       if (selectedProjects.length > 0) {
         fetchTodosByProject(selectedProjects[0]);
       }
     } catch (error) {
       console.error('Görev durumu güncelleme hatası:', error);
-      
+
       // Hata durumunda orijinal state'e geri dön
       setTasks(tasks.map((t) => t.id === taskId ? { ...t, status: task.status } : t));
-      
+
       toast.error("Görev taşınamadı", {
         description: error instanceof Error ? error.message : "Görev durumu güncellenirken bir hata oluştu.",
         duration: 3000,
@@ -824,7 +954,7 @@ export default function TodoApp() {
     const project = projects.find((p) => p.id === projectId)
     return project ? project.name : "Bilinmeyen Proje"
   }
-  
+
   // Tarih formatlar
   const formatDate = (dateString: string) => {
     try {
@@ -847,9 +977,9 @@ export default function TodoApp() {
   // Fetch user projects from API
   const fetchProjects = async () => {
     if (!token) return;
-    
+
     setIsProjectsLoading(true);
-    
+
     try {
       const response = await fetch('http://localhost:8000/api/projects', {
         method: 'GET',
@@ -858,13 +988,13 @@ export default function TodoApp() {
           'Content-Type': 'application/json'
         }
       });
-      
+
       if (!response.ok) {
         throw new Error('Projeler yüklenirken bir hata oluştu');
       }
-      
+
       const projectsData = await response.json();
-      
+
       // API'den gelen projeleri state'e kaydet
       setProjects(projectsData.map((project: any) => ({
         id: project.id.toString(),
@@ -873,7 +1003,7 @@ export default function TodoApp() {
         updated_at: project.updated_at,
         user_id: project.user_id
       })));
-      
+
     } catch (error) {
       console.error('Projects fetch error:', error);
       toast.error("Projeler yüklenemedi", {
@@ -885,7 +1015,7 @@ export default function TodoApp() {
       setIsProjectsLoading(false);
     }
   };
-  
+
   // Kullanıcı giriş yaptığında projeleri çek
   useEffect(() => {
     if (isAuthenticated && token) {
@@ -899,11 +1029,11 @@ export default function TodoApp() {
     setEditProjectName(project.name);
     setIsEditDialogOpen(true);
   };
-  
+
   // Proje güncelleme fonksiyonu
   const updateProject = async () => {
     if (!editingProject || editProjectName.trim() === "") return;
-    
+
     try {
       // API'ye güncelleme isteği gönder
       const response = await fetch(`http://localhost:8000/api/projects/${editingProject.id}`, {
@@ -916,41 +1046,41 @@ export default function TodoApp() {
           name: editProjectName
         })
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Proje güncellenirken bir hata oluştu');
       }
-      
+
       // API'den dönen güncellenmiş veriyi al
       const updatedProject = await response.json();
-      
+
       // Projeyi güncelle
-      setProjects(projects.map(p => 
-        p.id === editingProject.id 
-          ? { 
-              ...p, 
-              name: updatedProject.name || editProjectName,
-              updated_at: updatedProject.updated_at
-            } 
+      setProjects(projects.map(p =>
+        p.id === editingProject.id
+          ? {
+            ...p,
+            name: updatedProject.name || editProjectName,
+            updated_at: updatedProject.updated_at
+          }
           : p
       ));
-      
+
       // Dialog'u kapat ve state'i temizle
       setIsEditDialogOpen(false);
       setEditingProject(null);
       setEditProjectName("");
-      
+
       // Bildirimi göster
       toast.success("Proje güncellendi", {
         description: `"${editProjectName}" projesi başarıyla güncellendi.`,
         duration: 3000,
         style: { backgroundColor: '#D1FAE5', color: '#065F46', border: '1px solid #6EE7B7' }
       });
-      
+
       // Projeleri yeniden çek
       fetchProjects();
-      
+
     } catch (error) {
       console.error('Proje güncelleme hatası:', error);
       toast.error("Proje güncellenemedi", {
@@ -976,7 +1106,7 @@ export default function TodoApp() {
     <div className={`min-h-screen transition-colors duration-200 ${isDarkMode ? "dark" : ""}`}>
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-0">
         <Toaster />
-        
+
         {isLoading ? (
           // Yükleme ekranı
           <div className="flex items-center justify-center h-screen">
@@ -993,11 +1123,11 @@ export default function TodoApp() {
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="email">E-posta</Label>
-                    <Input 
-                      id="email" 
+                    <Input
+                      id="email"
                       type="email"
-                      value={email} 
-                      onChange={(e) => setEmail(e.target.value)} 
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                       placeholder="E-posta adresinizi girin"
                       className="dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                       required
@@ -1005,11 +1135,11 @@ export default function TodoApp() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="password">Şifre</Label>
-                    <Input 
-                      id="password" 
-                      type="password" 
-                      value={password} 
-                      onChange={(e) => setPassword(e.target.value)} 
+                    <Input
+                      id="password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                       placeholder="Şifrenizi girin"
                       className="dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                       required
@@ -1099,7 +1229,17 @@ export default function TodoApp() {
                   <Button variant="ghost" size="icon" onClick={toggleDarkMode} className="text-white hover:bg-white/20">
                     {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
                   </Button>
-                  
+
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => router.push("/profile")}
+                    className="text-white hover:bg-white/20"
+                    title="Profilim"
+                  >
+                    <User className="h-5 w-5" />
+                  </Button>
+
                   <Button variant="ghost" size="icon" onClick={handleLogout} className="text-white hover:bg-white/20" title="Çıkış Yap">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
@@ -1167,11 +1307,10 @@ export default function TodoApp() {
                       {projects.map((project) => (
                         <div
                           key={project.id}
-                          className={`flex flex-col p-3 rounded-lg border ${
-                            selectedProjects.includes(project.id)
-                              ? "bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800"
-                              : "bg-white border-gray-200 dark:bg-gray-700 dark:border-gray-600"
-                          }`}
+                          className={`flex flex-col p-3 rounded-lg border ${selectedProjects.includes(project.id)
+                            ? "bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800"
+                            : "bg-white border-gray-200 dark:bg-gray-700 dark:border-gray-600"
+                            }`}
                         >
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center space-x-2">
@@ -1212,7 +1351,7 @@ export default function TodoApp() {
                               </Button>
                             </div>
                           </div>
-                          
+
                           {project.created_at && (
                             <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                               Oluşturulma: {formatDate(project.created_at)}
@@ -1736,12 +1875,94 @@ export default function TodoApp() {
                       >
                         İptal
                       </Button>
-                      <Button 
-                        type="button" 
+                      <Button
+                        type="button"
                         onClick={updateProject}
                         disabled={!editProjectName.trim()}
                       >
                         Güncelle
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Profilim Dialog */}
+                <Dialog open={isProfileDialogOpen} onOpenChange={setIsProfileDialogOpen}>
+                  <DialogContent className="sm:max-w-md dark:bg-gray-800 dark:border-gray-700">
+                    <DialogHeader>
+                      <DialogTitle className="text-gray-800 dark:text-gray-100">Profilim</DialogTitle>
+                    </DialogHeader>
+                    {isStatsLoading ? (
+                      <div className="flex justify-center items-center h-48">
+                        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="space-y-4 py-4">
+                          <h4 className="font-medium text-lg dark:text-gray-200">İstatistikler</h4>
+                          <div className="grid grid-cols-2 gap-4 text-sm dark:text-gray-300">
+                            <p>Toplam Proje:</p><p className="font-semibold">{profileStats.totalProjects}</p>
+                            <p>Toplam Görev:</p><p className="font-semibold">{profileStats.totalTodos}</p>
+                            <p>Bekleyen Görev:</p><p className="font-semibold">{profileStats.bekliyor}</p>
+                            <p>Yapılan Görev:</p><p className="font-semibold">{profileStats.yapiliyor}</p>
+                            <p>Tamamlanan Görev:</p><p className="font-semibold">{profileStats.tamamlandi}</p>
+                            <p>İptal Edilen Görev:</p><p className="font-semibold">{profileStats.iptal}</p>
+                          </div>
+                        </div>
+                        <hr className="my-4 dark:border-gray-700" />
+                        <div className="space-y-4">
+                          <h4 className="font-medium text-lg dark:text-gray-200">Şifre Değiştir</h4>
+                          <div className="space-y-2">
+                            <Label htmlFor="current-password">Mevcut Şifre</Label>
+                            <Input
+                              id="current-password"
+                              type="password"
+                              placeholder="Mevcut şifreniz"
+                              value={currentPassword}
+                              onChange={(e) => setCurrentPassword(e.target.value)}
+                              className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:placeholder:text-gray-400"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="new-password">Yeni Şifre</Label>
+                            <Input
+                              id="new-password"
+                              type="password"
+                              placeholder="Yeni şifreniz"
+                              value={newPassword}
+                              onChange={(e) => setNewPassword(e.target.value)}
+                              className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:placeholder:text-gray-400"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="confirm-new-password">Yeni Şifre (Tekrar)</Label>
+                            <Input
+                              id="confirm-new-password"
+                              type="password"
+                              placeholder="Yeni şifrenizi doğrulayın"
+                              value={confirmNewPassword}
+                              onChange={(e) => setConfirmNewPassword(e.target.value)}
+                              className="dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:placeholder:text-gray-400"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <DialogFooter>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setIsProfileDialogOpen(false)}
+                        className="dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-100"
+                      >
+                        Kapat
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={handleChangePassword}
+                        disabled={isStatsLoading}
+                      >
+                        Şifreyi Değiştir
                       </Button>
                     </DialogFooter>
                   </DialogContent>

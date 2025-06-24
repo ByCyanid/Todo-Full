@@ -3,13 +3,16 @@
 namespace App\Http\Controllers\Api;
 
 use App\DTOs\AuthDTO;
+use App\DTOs\ChangePasswordDTO;
 use App\Exceptions\LoginException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\LoginRequest;
 use App\Http\Responses\LoginResponse;
 use App\Services\AuthService;
 use Exception;
+use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+
 class AuthController extends Controller
 {
     protected AuthService $authService;
@@ -72,7 +75,19 @@ class AuthController extends Controller
             ], 500);
         }
     }
+    public function changePassword(Request $request)
+    {
+        $request->validate([
+            'old_password' => 'required',
+            'new_password' => 'required|min:8|confirmed',
+        ]);
 
+        $dto = ChangePasswordDTO::fromRequest($request);
+        $this->authService->changePassword($request->user(), $dto);
 
-
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Şifre başarıyla güncellendi.'
+        ], 200);
+    }
 }

@@ -9,7 +9,7 @@ use App\Http\Requests\TodoRequest;
 use App\Http\Responses\TodoResponse;
 use App\Services\TodoService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
+
 
 class TodoController extends Controller
 {
@@ -89,7 +89,7 @@ class TodoController extends Controller
             $todos = $this->todoService->getTodosByUserAndProject($projectId);
 
             if ($todos->isEmpty()) {
-                return response()->json(['message' => 'No todos found for this project.'], 404);
+                return response()->json(['message' => 'Bu projeye ait todo bulunamadı.'], 404);
             }
 
             return response()->json($todos, 200);

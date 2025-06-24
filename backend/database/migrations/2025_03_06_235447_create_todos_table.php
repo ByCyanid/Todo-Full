@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('title');
             $table->text('description')->nullable();
             $table->enum('priority', ['dusuk', 'orta', 'yuksek']);
-            $table->enum('status', ['bekliyor', 'yapiliyor', 'iptal edildi', 'tamamlandi'])->default('bekliyor');
+            $table->enum('status', ['bekliyor', 'yapiliyor', 'iptal', 'tamamlandi'])->default('bekliyor');
             $table->unsignedBigInteger('project_id');
             $table->foreign('project_id')->references('id')->on('projects')->onDelete('cascade');
 

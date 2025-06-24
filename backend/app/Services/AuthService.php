@@ -3,10 +3,14 @@
 namespace App\Services;
 
 use App\DTOs\AuthDTO;
+use App\DTOs\ChangePasswordDTO;
 use App\Exceptions\LoginException;
+use App\Models\User;
 use App\Repositories\AuthRepository;
 use Exception;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 
 class AuthService
 {
@@ -61,5 +65,18 @@ class AuthService
         } catch (Exception $e) {
             throw new Exception('Çıkış işlemi sırasında bir hata oluştu: ' . $e->getMessage());
         }
+    }
+
+
+    public function changePassword(User $user, ChangePasswordDTO $dto): void
+    {
+        if (!Hash::check($dto->oldPassword, $user->password)) {
+            throw ValidationException::withMessages([
+                'old_password' => ['Eski şifre yanlış.'],
+            ]);
+        }
+
+        $hashedPassword = Hash::make($dto->newPassword);
+        $this->authRepository->updatePassword($user, $hashedPassword);
     }
 }
