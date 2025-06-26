@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\ProjectController;
 use App\Http\Controllers\Api\TodoController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\DatabaseController;
 
 Route::middleware('auth:api')->group(function () {
     // Projects
@@ -30,3 +31,10 @@ Route::get('/yetkisiz', function () {
     }
     return response()->json(['message' => 'Erişim başarılı.']);
 })->name('yetkisiz');
+Route::middleware('auth:api')->group(function () {
+    Route::apiResource('databases', DatabaseController::class);
+    Route::post('databases/{database}/save', [DatabaseController::class, 'saveAllChanges']);
+    Route::get('databases/{database}/export', [DatabaseController::class, 'exportSchema']);
+    Route::post('databases/{database}/import', [DatabaseController::class, 'importSchema']);
+    Route::get('databases/{database}/sql', [DatabaseController::class, 'generateSQL']);
+});

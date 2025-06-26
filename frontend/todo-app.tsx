@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { PlusCircle, Trash2, CheckCircle, XCircle, Clock, Moon, Sun, Flag, FolderPlus, Filter, X, User } from "lucide-react"
+import { PlusCircle, Trash2, CheckCircle, XCircle, Clock, Moon, Sun, Flag, FolderPlus, Filter, X, User, Database } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -22,7 +22,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
-import { toast, Toaster } from "sonner"
+import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 
 type TaskStatus = "bekliyor" | "yapiliyor" | "tamamlandi" | "iptal"
@@ -373,11 +373,8 @@ export default function TodoApp() {
           console.error("Yanıt metni okunamadı", e);
         }
 
-        toast.error("Görevler yüklenemedi", {
-          description: errorMessage,
-          duration: 3000,
-          style: { backgroundColor: '#FEE2E2', color: '#991B1B', border: '1px solid #F87171' }
-        });
+        // Toast mesajını kaldırdık - sadece console'da log göster
+        console.error('Todo fetch error:', errorMessage);
 
         return;
       }
@@ -432,11 +429,7 @@ export default function TodoApp() {
 
     } catch (error) {
       console.error('Görevleri çekme hatası:', error);
-      toast.error("Görevler yüklenemedi", {
-        description: error instanceof Error ? error.message : "Görevler yüklenirken bir hata oluştu.",
-        duration: 3000,
-        style: { backgroundColor: '#FEE2E2', color: '#991B1B', border: '1px solid #F87171' }
-      });
+      // Toast mesajını kaldırdık - sadece console'da log göster
     }
   };
 
@@ -1006,11 +999,7 @@ export default function TodoApp() {
 
     } catch (error) {
       console.error('Projects fetch error:', error);
-      toast.error("Projeler yüklenemedi", {
-        description: error instanceof Error ? error.message : "Projeler yüklenirken bir hata oluştu.",
-        duration: 3000,
-        style: { backgroundColor: '#FEE2E2', color: '#991B1B', border: '1px solid #F87171' }
-      });
+      // Toast mesajını kaldırdık - sadece console'da log göster
     } finally {
       setIsProjectsLoading(false);
     }
@@ -1105,7 +1094,6 @@ export default function TodoApp() {
   return (
     <div className={`min-h-screen transition-colors duration-200 ${isDarkMode ? "dark" : ""}`}>
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-0">
-        <Toaster />
 
         {isLoading ? (
           // Yükleme ekranı
@@ -1228,6 +1216,16 @@ export default function TodoApp() {
 
                   <Button variant="ghost" size="icon" onClick={toggleDarkMode} className="text-white hover:bg-white/20">
                     {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+                  </Button>
+
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => router.push("/database")}
+                    className="text-white hover:bg-white/20"
+                    title="Veritabanı Tasarımcısı"
+                  >
+                    <Database className="h-5 w-5" />
                   </Button>
 
                   <Button
